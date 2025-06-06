@@ -1,0 +1,350 @@
+import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
+import '../models/member.dart';
+import '../services/member_service.dart';
+import '../services/auth_service.dart';
+import '../notifiers.dart';
+import 'login_page.dart';
+import 'create_anggota_page.dart';
+import 'member_detail_page.dart';
+
+List<Member> _members = [];
+
+class LandingPage extends StatefulWidget {
+  const LandingPage({super.key});
+
+  @override
+  State<LandingPage> createState() => _LandingPageState();
+}
+
+class _LandingPageState extends State<LandingPage> {
+  final TextEditingController _searchController = TextEditingController();
+  final MemberService _memberService = MemberService();
+  final AuthService _authService = AuthService();
+  List<Member> _filteredMembers = [];
+  bool _isLoading = false;
+  String _errorMessage = '';
+  String _searchQuery = '';
+  @override
+  void initState() {
+    super.initState();
+    _loadMembers();
+    _searchController.addListener(() {
+      _onSearchChanged(_searchController.text);
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadMembers() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      final members = await _memberService.getMembers();
+      setState(() {
+        _members = members;
+        _filterMembers();
+        _isLoading = false;
+      });
+    } catch (e) {
+      // Check if it's a token expiration error (status code 406)
+      if (e is DioException && e.response?.statusCode == 406) {
+        if (mounted) {
+          await _authService.logout();
+
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Sesi telah berakhir. Silakan login kembali.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          Navigator.of(
+            context,
+          ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginPage()));
+        }
+      } else {
+          setState(() {
+            _errorMessage = 'Gagal memuat data. Silakan coba lagi.';
+            _isLoading = false;
+          });
+      }
+    }
+  }
+
+  void _filterMembers() {
+    if (_searchQuery.isEmpty) {
+      _filteredMembers = List.from(_members);
+      return;
+    }
+
+    final query = _searchQuery.toLowerCase();
+    _filteredMembers =
+        _members.where((member) {
+          return member.nama.toLowerCase().contains(query) ||
+              member.alamat.toLowerCase().contains(query) ||
+              member.nomorInduk.toString().contains(query);
+        }).toList();
+  }
+
+  void _onSearchChanged(String query) {
+    setState(() {
+      _searchQuery = query;
+      _filterMembers();
+    });
+  }
+
+  Future<void> _showLogoutConfirmation() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text(
+              'Konfirmasi Keluar',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: Text(
+              'Apakah Anda yakin ingin keluar?',
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(
+                  'Batal',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
+                ),
+                child: const Text('Keluar'),
+              ),
+            ],
+          ),
+    );
+
+    if (confirmed == true) {
+      await _authService.logout();
+      if (!mounted) return;
+
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginPage()));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('List Anggota'),
+        actions: [
+          IconButton(
+            icon: Icon(
+              Icons.dark_mode,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+            onPressed: () {
+              selectedThemeNotifier.value = !selectedThemeNotifier.value;
+            },
+            tooltip: 'Ganti Tema',
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _showLogoutConfirmation,
+            tooltip: 'Logout',
+            color: Theme.of(context).colorScheme.error,
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'add',
+        onPressed: () async {
+          final existingNomorInduks =
+              _members.map((m) => m.nomorInduk).toList();
+
+          final created = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CreateAnggotaPage(
+                existingNomorInduks: existingNomorInduks,
+              ),
+            ),
+          );
+          if (created == true) {
+            _loadMembers();
+          }
+        },
+        tooltip: 'Tambah Anggota',
+        child: const Icon(Icons.add),
+      ),
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage.isNotEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_errorMessage, style: const TextStyle(color: Colors.red)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _loadMembers,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_members.isEmpty) {
+      return const Center(child: Text('Tidak ada anggota ditemukan'));
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Cari anggota...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+            ),
+            onChanged: _onSearchChanged,
+          ),
+        ),
+        if (_filteredMembers.isEmpty && _searchQuery.isNotEmpty)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.search_off, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Tidak ada hasil untuk "$_searchQuery"',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _loadMembers,
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                itemCount: _filteredMembers.length,
+                itemBuilder: (context, index) {
+                  final member = _filteredMembers[index];
+                  return MemberListItem(member: member, onRefresh: _loadMembers);
+                },
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class MemberListItem extends StatelessWidget {
+  final Member member;
+  final Function onRefresh;
+
+  const MemberListItem({
+    super.key,
+    required this.member,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ListTile(
+        title: Text(
+          member.nama,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color:
+                member.statusAktif == 0
+                    ? Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.6)
+                    : null,
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('No. Induk: ${member.nomorInduk}'),
+            Row(
+              children: [
+                Text(
+                  "Status: ",
+                ),
+                Text(
+                  member.statusAktif == 1 ? 'Aktif' : 'Tidak Aktif',
+                  style: TextStyle(
+                    color: member.statusAktif == 1 ? Colors.green : Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () async {
+          // Get all members for nomor induk validation
+          final existingNomorInduks =
+              _members.map((m) => m.nomorInduk).toList();
+
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) => MemberDetailPage(
+                    member: member,
+                    existingNomorInduks: existingNomorInduks,
+                  ),
+            ),
+          );
+
+          // If data was changed (edited or deleted), refresh the list
+          if (result == true) {
+            onRefresh();
+          }
+        },
+      ),
+    );
+  }
+}
