@@ -16,7 +16,8 @@ class MemberService {
       } else {
         throw Exception('Failed to load members: ${response.statusCode}');
       }
-    } on DioException {
+    } on DioException catch (e) {
+      print('Error fetching members: $e');
       rethrow;
     }
   }

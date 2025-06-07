@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../services/member_service.dart';
 import 'package:dio/dio.dart';
 import '../services/transaction_service.dart';
+import '../services/location_service.dart' as loc_service;
+import '../models/location.dart';
 
 class CreateAnggotaPage extends StatefulWidget {
   final List<int> existingNomorInduks;
@@ -25,6 +27,13 @@ class _CreateAnggotaPageState extends State<CreateAnggotaPage> {
   bool _isLoading = false;
   String _errorMessage = '';
   final _memberService = MemberService();
+  final loc_service.LocationService _locationService = loc_service.LocationService();
+  List<Kabupaten> _kabupatenList = [];
+  Kabupaten? _selectedKabupaten;
+  List<Kecamatan> _kecamatanList = [];
+  Kecamatan? _selectedKecamatan;
+  List<Desa> _desaList = [];
+  Desa? _selectedDesa;
 
   @override
   void dispose() {
@@ -35,6 +44,62 @@ class _CreateAnggotaPageState extends State<CreateAnggotaPage> {
     _teleponController.dispose();
     _saldoAwalController.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchKabupaten();
+  }
+
+  Future<void> _fetchKabupaten() async {
+    try {
+      final kabupaten = await _locationService.getKabupaten();
+      setState(() {
+        _kabupatenList = kabupaten;
+        _selectedKabupaten = null;
+        _kecamatanList = [];
+        _selectedKecamatan = null;
+        _desaList = [];
+        _selectedDesa = null;
+      });
+    } catch (e) {
+      // Optional: handle error
+    }
+  }
+
+  Future<void> _fetchKecamatan(int kabupatenId) async {
+    try {
+      final kecamatan = await _locationService.getKecamatan(kabupatenId);
+      setState(() {
+        _kecamatanList = kecamatan;
+        _selectedKecamatan = null;
+        _desaList = [];
+        _selectedDesa = null;
+      });
+      if (kecamatan.isEmpty) {
+        setState(() {
+          _errorMessage = 'Tidak ada kecamatan untuk kabupaten ini.';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Gagal mengambil data kecamatan: '
+            '${e is DioException ? e.message : e.toString()}';
+      });
+    }
+  }
+
+  Future<void> _fetchDesa(int kecamatanId) async {
+    try {
+      final desa = await _locationService.getDesa(kecamatanId);
+      setState(() {
+        _desaList = desa;
+        _selectedDesa = null;
+      });
+    } catch (e) {
+      // Optional: handle error
+    }
   }
 
   Future<void> _submit() async {
@@ -52,6 +117,10 @@ class _CreateAnggotaPageState extends State<CreateAnggotaPage> {
         'alamat': _alamatController.text,
         'tgl_lahir': _tglLahirController.text,
         'telepon': _teleponController.text,
+        'prov_id': 1,
+        'kab_id': _selectedKabupaten?.id,
+        'kec_id': _selectedKecamatan?.id,
+        'desa_id': _selectedDesa?.id,
       };
 
       final int memberId = await _memberService.createMember(data);
@@ -165,7 +234,100 @@ class _CreateAnggotaPageState extends State<CreateAnggotaPage> {
                               ? 'Alamat wajib diisi'
                               : null,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
+                DropdownButtonFormField<Kabupaten>(
+                  value: _selectedKabupaten,
+                  items: [
+                    const DropdownMenuItem<Kabupaten>(
+                      value: null,
+                      child: Text('Pilih Kabupaten'),
+                    ),
+                    ..._kabupatenList.map((kab) => DropdownMenuItem(
+                      value: kab,
+                      child: Text(kab.value),
+                    ))
+                  ],
+                  onChanged: (value) async {
+                    print('DEBUG: Pilih kabupaten value: $value, id: \'${value?.id}\'');
+                    setState(() {
+                      _selectedKabupaten = value;
+                      _selectedKecamatan = null;
+                      _selectedDesa = null;
+                      _kecamatanList = [];
+                      _desaList = [];
+                    });
+                    if (value != null) {
+                      await _fetchKecamatan(value.id);
+                    }
+                  },
+                  decoration: const InputDecoration(
+                    labelText: 'Kabupaten',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) => value == null ? 'Kabupaten wajib dipilih' : null,
+                ),
+                const SizedBox(height: 20),
+                DropdownButtonFormField<Kecamatan>(
+                  value: _selectedKecamatan,
+                  items: [
+                    const DropdownMenuItem<Kecamatan>(
+                      value: null,
+                      child: Text('Pilih Kecamatan'),
+                    ),
+                    ..._kecamatanList.map((kec) => DropdownMenuItem(
+                      value: kec,
+                      child: Text(kec.value),
+                    ))
+                  ],
+                  onChanged: _kecamatanList.isEmpty
+                      ? null
+                      : (value) async {
+                          print('DEBUG: Pilih kecamatan value: $value, id: \'${value?.id}\'');
+                          setState(() {
+                            _selectedKecamatan = value;
+                            _selectedDesa = null;
+                            _desaList = [];
+                          });
+                          if (value != null) {
+                            await _fetchDesa(value.id);
+                          }
+                        },
+                  decoration: const InputDecoration(
+                    labelText: 'Kecamatan',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) => value == null ? 'Kecamatan wajib dipilih' : null,
+                  disabledHint: const Text('Pilih kabupaten dulu'),
+                ),
+                const SizedBox(height: 20),
+                DropdownButtonFormField<Desa>(
+                  value: _selectedDesa,
+                  items: [
+                    const DropdownMenuItem<Desa>(
+                      value: null,
+                      child: Text('Pilih Desa'),
+                    ),
+                    ..._desaList.map((desa) => DropdownMenuItem(
+                      value: desa,
+                      child: Text(desa.value),
+                    ))
+                  ],
+                  onChanged: _desaList.isEmpty
+                      ? null
+                      : (value) {
+                          setState(() {
+                            print('DEBUG: Pilih desa value: $value, id: \'${value?.id}\'');
+                            _selectedDesa = value;
+                          });
+                        },
+                  decoration: const InputDecoration(
+                    labelText: 'Desa',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) => value == null ? 'Desa wajib dipilih' : null,
+                  disabledHint: const Text('Pilih kecamatan dulu'),
+                ),
+                const SizedBox(height: 20),
                 TextFormField(
                   controller: _tglLahirController,
                   readOnly: true,
@@ -229,6 +391,8 @@ class _CreateAnggotaPageState extends State<CreateAnggotaPage> {
                     return null;
                   },
                 ),
+                const SizedBox(height: 16),
+                
                 const SizedBox(height: 35),
                 ElevatedButton(
                   onPressed: _isLoading ? null : _submit,

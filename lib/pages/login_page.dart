@@ -189,7 +189,7 @@ class _LoginPageState extends State<LoginPage> {
                     Checkbox(
                       value: _rememberMe,
                       activeColor: Theme.of(context).colorScheme.primary,
-                      onChanged: (value) => setState(() => _rememberMe = value ?? false),
+                      onChanged: (value) => setState(() => _rememberMe = value!),
                     ),
                     Text(
                       'Ingat Saya',

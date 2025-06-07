@@ -4,6 +4,8 @@ import '../services/member_service.dart';
 import 'package:dio/dio.dart';
 import 'edit_anggota_page.dart';
 import 'detail_transaction_page.dart';
+import '../services/location_service.dart' as loc_service;
+import '../models/location.dart';
 
 class MemberDetailPage extends StatefulWidget {
   final Member member;
@@ -25,11 +27,40 @@ class _MemberDetailPageState extends State<MemberDetailPage> {
   bool result = false;
   late Member _member;
 
+  String? _namaKabupaten;
+  String? _namaKecamatan;
+  String? _namaDesa;
+
+  bool _isLocationLoading = true;
+
   @override
   void initState() {
     print('\nMember ID: ${widget.member.id}');
     super.initState();
     _member = widget.member;
+    _fetchLocationNames();
+  }
+
+  Future<void> _fetchLocationNames() async {
+    setState(() { _isLocationLoading = true; });
+    try {
+      final kabId = _member.kabId;
+      final kecId = _member.kecId;
+      final desaId = _member.desaId;
+
+      final kabList = await loc_service.LocationService().getKabupaten();
+      _namaKabupaten = kabList.firstWhere((k) => k.id == kabId, orElse: () => Kabupaten(id: 0, value: '-')).value;
+
+      final kecList = await loc_service.LocationService().getKecamatan(kabId);
+      _namaKecamatan = kecList.firstWhere((k) => k.id == kecId, orElse: () => Kecamatan(id: 0, value: '-')).value;
+
+      final desaList = await loc_service.LocationService().getDesa(kecId);
+      _namaDesa = desaList.firstWhere((d) => d.id == desaId, orElse: () => Desa(id: 0, value: '-')).value;
+    } catch (e) {
+      // Optional: handle error
+    } finally {
+      setState(() { _isLocationLoading = false; });
+    }
   }
 
   Future<void> _showDeleteConfirmation() async {
@@ -237,105 +268,109 @@ class _MemberDetailPageState extends State<MemberDetailPage> {
           }
           Navigator.pop(context, result);
         },
-        child:
-            Center(
-              child: _isLoading
+        child: Center(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _isLocationLoading
                   ? const Center(child: CircularProgressIndicator())
                   : RefreshIndicator(
-                    onRefresh: _refreshMemberData,
-                    child: SingleChildScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 24),
-                          DetailItem(
-                            label: 'Nomor Induk',
-                            value: _member.nomorInduk.toString(),
-                          ),
-                          DetailItem(label: 'Nama', value: _member.nama),
-                          DetailItem(label: 'Alamat', value: _member.alamat),
-                          DetailItem(
-                            label: 'Tanggal Lahir',
-                            value: _member.tglLahir,
-                          ),
-                          DetailItem(label: 'Telepon', value: _member.telepon),
-                          Row(
-                            children: [
-                              Text(
-                                'Status Aktif:',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: Theme.of(context).colorScheme.primary,
+                      onRefresh: _refreshMemberData,
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 24),
+                            DetailItem(
+                              label: 'Nomor Induk',
+                              value: _member.nomorInduk.toString(),
+                            ),
+                            DetailItem(label: 'Nama', value: _member.nama),
+                            DetailItem(label: 'Alamat', value: _member.alamat),
+                            DetailItem(
+                              label: 'Tanggal Lahir',
+                              value: _member.tglLahir,
+                            ),
+                            DetailItem(label: 'Telepon', value: _member.telepon),
+                            DetailItem(label: 'Kabupaten', value: _namaKabupaten ?? '-'),
+                            DetailItem(label: 'Kecamatan', value: _namaKecamatan ?? '-'),
+                            DetailItem(label: 'Desa', value: _namaDesa ?? '-'),
+                            Row(
+                              children: [
+                                Text(
+                                  'Status Aktif:',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
                                 ),
-                              ),
-                              const Padding(padding: EdgeInsets.only(left: 16.0)),
-                              Text(
-                                _member.statusAktif == 1
-                                    ? 'Aktif'
-                                    : 'Tidak Aktif',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color:
+                                const Padding(padding: EdgeInsets.only(left: 16.0)),
+                                Text(
+                                  _member.statusAktif == 1
+                                      ? 'Aktif'
+                                      : 'Tidak Aktif',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    color:
                                       _member.statusAktif == 1
                                           ? Colors.green
                                           : Colors.red,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          if (_member.statusAktif == 1)
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => DetailTransactionPage(
-                                      memberId: _member.id,
-                                      memberName: _member.nama,
-                                    ),
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                );
-                              },
-                              icon: const Icon(Icons.receipt_long),
-                              label: const Text('Transaksi'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Theme.of(context).colorScheme.primary,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                  horizontal: 24,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 30),
+                            if (_member.statusAktif == 1)
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => DetailTransactionPage(
+                                        memberId: _member.id,
+                                        memberName: _member.nama,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.receipt_long),
+                                label: const Text('Transaksi'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Theme.of(context).colorScheme.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                    horizontal: 24,
+                                  ),
                                 ),
                               ),
-                            ),
-                          const SizedBox(height: 50),
-                          Center(
-                            child: ElevatedButton.icon(
-                              onPressed:
+                            const SizedBox(height: 50),
+                            Center(
+                              child: ElevatedButton.icon(
+                                onPressed:
                                   _isLoading ? null : _showDeleteConfirmation,
-                              icon: const Icon(Icons.delete),
-                              label: const Text('Hapus Anggota'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
+                                icon: const Icon(Icons.delete),
+                                label: const Text('Hapus Anggota'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
                                     Theme.of(context).colorScheme.error,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                  horizontal: 24,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                    horizontal: 24,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 20),
-                        ],
+                            const SizedBox(height: 20),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-            ),
+        ),
       ),
     );
   }

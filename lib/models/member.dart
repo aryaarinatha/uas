@@ -7,6 +7,9 @@ class Member {
   final String telepon;
   final String? imageUrl;
   final int statusAktif;
+  final int kabId;
+  final int kecId;
+  final int desaId;
 
   Member({
     required this.id,
@@ -17,6 +20,9 @@ class Member {
     required this.telepon,
     this.imageUrl,
     required this.statusAktif,
+    required this.kabId,
+    required this.kecId,
+    required this.desaId,
   });
 
   factory Member.fromJson(Map<String, dynamic> json) {
@@ -29,6 +35,9 @@ class Member {
       telepon: json['telepon'],
       imageUrl: json['image_url'],
       statusAktif: json['status_aktif'],
+      kabId: json['kab_id'],
+      kecId: json['kec_id'],
+      desaId: json['desa_id'],
     );
   }
 
@@ -42,6 +51,9 @@ class Member {
       'telepon': telepon,
       'image_url': imageUrl,
       'status_aktif': statusAktif,
+      'kab_id': kabId,
+      'kec_id': kecId,
+      'desa_id': desaId,
     };
   }
 }

@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AuthService {
-  final String baseUrl = 'https://mobileapis.manpits.xyz/api';
+  final String baseUrl = 'https://mobileapis-test.manpits.xyz/api';
   late final Dio _dio;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   static const String _tokenKey = 'auth_token';
